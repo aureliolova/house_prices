@@ -178,4 +178,97 @@ def main_class_var_figure(data:pd.DataFrame, class_col:str, val_col:str, log_bp:
 
     return fig, ax
 
+def make_hist(data:pd.DataFrame, num_col:str, ax:plt.Axes=None, bin_mult:float=1, log:bool=False, return_data:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
+    hist_data = (
+        data
+        .copy()
+        .dropna(subset=[num_col])
+        .loc[:, num_col]
+    )
 
+    bins = math.ceil(math.log2(hist_data.max())*bin_mult)
+    if log:
+        hist_data = np.log10(hist_data)
+        xlab = f'log10 {num_col}'
+    else:
+        xlab = num_col
+
+    if return_data:
+        return hist_data
+    if not ax:
+        fig, ax = plt.subplots(figsize=(20, 10))
+    
+    ax.hist(hist_data, density=True, bins=bins)
+
+    ax.set_xlabel(xlab)
+    ax.set_ylabel('density')
+    total_rows = len(data)
+    non_null_rows = len(hist_data)
+    pct_null = non_null_rows / total_rows * 100
+
+    ax.set_title(f'{num_col}: {non_null_rows=} out of {total_rows=} ({pct_null:1,.2f}%)')
+    if not ax:
+        return fig, ax
+    else:
+        return ax
+
+def make_boxplot(data:pd.DataFrame, num_col:str, log:bool=False, ax:plt.Axes=None) -> ty.Tuple[plt.Figure, plt.Axes]:
+    hist_data = make_hist(data=data, num_col=num_col, return_data=True, log=log)
+
+    if not ax:
+        fig, ax = plt.subplots(figsize=(20, 10))
+    
+    ax.boxplot(hist_data, vert=False)
+    
+    if not ax:
+        return fig, ax
+    else:
+        return ax
+        
+def make_scatterplot(data:pd.DataFrame, pred_col:str, resp_col:str, ax:plt.Axes=None, log_pred:bool=False, log_resp:bool=False, return_data:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
+    scatter_data = (
+        data
+        .copy()
+        .dropna(subset=[pred_col, resp_col], how='any')
+    )
+    
+    if log_pred:
+        scatter_data.loc[:, pred_col] = np.log10(scatter_data.loc[:, pred_col])
+        xlab = f'log10 {pred_col}'
+    else:
+        xlab = pred_col
+
+    if log_resp:
+        scatter_data.loc[:, resp_col] = np.log10(scatter_data.loc[:, resp_col])
+        ylab = f'log10 {resp_col}'
+    else:
+        ylab = resp_col
+
+    if return_data:
+        return scatter_data
+
+    if not ax:
+        fig, ax = plt.subplots(figsize=(20, 10))
+    ax.scatter(scatter_data.loc[:, pred_col], scatter_data.loc[:, resp_col])
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    if not ax: 
+        return fig, ax
+    else:
+        return ax
+
+def main_cont_var_figure(data:pd.DataFrame, cont_col:str, tgt_col:str, hist_bin_mult:float=1, log_cont:bool=False, log_tgt:bool=False) -> plt.Figure:
+    fig = plt.figure(figsize=(20, 20))
+
+    gridspec = fig.add_gridspec(9, 1)
+    
+    hist_ax = fig.add_subplot(gridspec[0:4])
+    make_hist(data=data, num_col=cont_col, ax=hist_ax, bin_mult=hist_bin_mult, log=log_cont)
+
+    bp_ax = fig.add_subplot(gridspec[4])
+    make_boxplot(data=data, num_col=cont_col, log=log_cont, ax=bp_ax)
+
+    scatter_ax = fig.add_subplot(gridspec[5:9])
+    make_scatterplot(data=data, pred_col=cont_col, resp_col=tgt_col, ax=scatter_ax, log_pred=log_cont, log_resp=log_tgt)
+
+    return fig
