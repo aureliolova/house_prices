@@ -16,6 +16,18 @@ from matplotlib import pyplot as plt
 plt.style.use('seaborn')
 import seaborn as sns
 
+def get_data():
+    '''
+    Load training data.
+    '''
+    mainpath = os.environ['MAINPATH']
+    datapath = mainpath + '\\data'
+    data = pd.read_csv(f'{datapath}\\train.csv')
+    data.columns = [col.lower() for col in data.columns]
+    print(data.head())
+    return data
+
+
 def make_barplot(data:pd.DataFrame, bar_col:str, pct:bool=False, return_data:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
     '''
     Produce a count barplot of bar_col in data (excluding nulls)
@@ -133,6 +145,12 @@ def make_classed_boxplot(data:pd.DataFrame, key_col:str, val_col:str, log:bool=F
 def main_class_var_figure(data:pd.DataFrame, class_col:str, val_col:str, log_bp:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
     '''
     Produce a figure containing a count bar plot with cumulative percent line by class indicated in class_col; second figure contains separate boxplots of val_col by class_col.
+
+    Arguments:
+    - data: the dataframe to use.
+    - class_col: the column in data to use for sectioning variables.
+    - val_col: the column in data to use as target.
+    - log_bp: indicate wheter to use val_col in the log10 scale.
     '''
     barplot_data = make_barplot(data=data, bar_col=class_col, pct=False, return_data=True)
     
@@ -148,8 +166,8 @@ def main_class_var_figure(data:pd.DataFrame, class_col:str, val_col:str, log_bp:
 
     total_rows = len(data)
     non_null_rows = barplot_data.loc[:, 'count'].sum()
-
-    ax[0].set_title(f'{class_col}: {non_null_rows=} out of {total_rows=}')
+    pct_non_null = non_null_rows / total_rows * 100 
+    ax[0].set_title(f'{class_col}: {non_null_rows=} out of {total_rows=} ({pct_non_null:1,.2f}%)')
     ax[0].bar(x=barplot_data.index, height=barplot_data.loc[:, 'count'])
     ax[0].set_xticks(barplot_data.index)
     ax[0].set_xticklabels(barplot_data.loc[:, class_col])
@@ -179,6 +197,18 @@ def main_class_var_figure(data:pd.DataFrame, class_col:str, val_col:str, log_bp:
     return fig, ax
 
 def make_hist(data:pd.DataFrame, num_col:str, ax:plt.Axes=None, bin_mult:float=1, log:bool=False, return_data:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
+    '''
+    Produce a histogram of num_col.
+
+    Arguments:
+    - data: the dataframe to use.
+    - num_col: column in data to use for the histogram.
+    - ax: if specified, the histogram is plotted on this plt.Axes.
+    - bin_mult: factor to multiply the standard number of bins in the histogram (ceil(log2(max_value))).
+    - log: indicates whether to plot the values in a log10 scale.
+    - return_data: indicates whether to plot the histogram or return the data used for plotting.
+    '''
+    
     hist_data = (
         data
         .copy()
@@ -213,6 +243,15 @@ def make_hist(data:pd.DataFrame, num_col:str, ax:plt.Axes=None, bin_mult:float=1
         return ax
 
 def make_boxplot(data:pd.DataFrame, num_col:str, log:bool=False, ax:plt.Axes=None) -> ty.Tuple[plt.Figure, plt.Axes]:
+    '''
+    Produce a boxplot of num_col.
+
+    Arguments:
+    - data: the dataframe to use.
+    - num_col: the column in dataframe to use for the boxplot.
+    - log: indicates whether to plot the data in log10 scale.
+    - ax: if specified, the boxplot is plotted in this plt.Axes.
+    '''
     hist_data = make_hist(data=data, num_col=num_col, return_data=True, log=log)
 
     if not ax:
@@ -226,6 +265,19 @@ def make_boxplot(data:pd.DataFrame, num_col:str, log:bool=False, ax:plt.Axes=Non
         return ax
         
 def make_scatterplot(data:pd.DataFrame, pred_col:str, resp_col:str, ax:plt.Axes=None, log_pred:bool=False, log_resp:bool=False, return_data:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
+    '''
+    Produce a scatter plot of pred_col vs resp_col.
+
+    Arguments:
+    - data: the dataframe to use.
+    - pred_col: the column in data to use as predictive variable (x-axis).
+    - resp_col: the column in data to use as response variable (y-axis).
+    - ax: if specified, the scatterplot is plotted on this plt.Axes.
+    - log_pred: indicate whether to plot predictor in log10 scale.
+    - log_resp: indicate whether to plot response in log10 scale.
+    - return_data: indicate whether to produce the plot or to return the data used for plotting.
+    '''
+
     scatter_data = (
         data
         .copy()
@@ -258,6 +310,17 @@ def make_scatterplot(data:pd.DataFrame, pred_col:str, resp_col:str, ax:plt.Axes=
         return ax
 
 def main_cont_var_figure(data:pd.DataFrame, cont_col:str, tgt_col:str, hist_bin_mult:float=1, log_cont:bool=False, log_tgt:bool=False) -> plt.Figure:
+    '''
+    Produce main figure for continuous variable analysis; contains a histogram of cont_col, a boxplot of the same variable, and a scatterplot of cont_col v. resp_col.
+
+    Arguments:
+    - data: the dataframe to use.
+    - cont_col: the column in dataframe containing the continous variable to analyze.
+    - tgt_col: the column in dataframe containing the target variable to analyze (continous).
+    - hist_bin_mult: factor to multiply the standard number of bins in the histogram (ceil(log2(max_value))).
+    - log_cont: indicate whether to plot cont_col in the log10 scale.
+    - log_tgt: indicate whether to plot tgt_col in the log10 scale.
+    '''
     fig = plt.figure(figsize=(20, 20))
 
     gridspec = fig.add_gridspec(9, 1)
