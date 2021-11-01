@@ -18,8 +18,21 @@ from sklearn import pipeline
 from sklearn import preprocessing as prep
 
 from preprocessing.utils import TransformerAlreadyFittedError, TransformerNotFittedError, FeatureNotFoundError, NumericFeatureMismatchError
+#%% PipelineBuilder
+
+class ColumnTransformBuilder:
+
+    def __init__(self, *args):
+        self._transformations = args
+    
+    
+#%% base FeatureTransformerClass
+class FeatureTransformer(base.TransformerMixin, base.BaseEstimator):
+    def __init__(self):
+        pass
+
 #%%
-class NumericFeatureTransformer(base.TransformerMixin, base.BaseEstimator):
+class NumericFeatureTransformer(FeatureTransformer):
     '''
     Base class for transforming a specific numeric feature.
     '''
@@ -34,32 +47,26 @@ class NumericFeatureTransformer(base.TransformerMixin, base.BaseEstimator):
 
 
     def __radd__(self, other) -> pipeline.Pipeline:
-        s_trans = self.make_pipeline()
-        s_feat = self.feature_name
+        s_trans = self.make_trans_tuple()
+        o_trans = other.make_trans_tuple()
 
-        o_trans = other.make_pipeline()
-        o_feat = other.feature_name
-
-        sum_pipe_steps = [
-            (s_feat, s_trans),
-            (o_feat, o_trans),
+        sum_trans_steps = [
+            s_trans,
+            o_trans
         ]
-        sum_pipe = pipeline.Pipeline(sum_pipe_steps)
-        return sum_pipe 
+
+        return sum_trans_steps 
 
     def __ladd__(self, other) -> pipeline.Pipeline:
-        s_trans = self.make_pipeline()
-        s_feat = self.feature_name
+        s_trans = self.make_trans_tuple()
+        o_trans = other.make_trans_tuple()
 
-        o_trans = other.make_pipeline()
-        o_feat = other.feature_name
-
-        sum_pipe_steps = [
-            (o_feat, o_trans),
-            (s_feat, s_trans)
+        sum_trans_steps = [
+            o_trans,
+            s_trans
         ]
-        sum_pipe = pipeline.Pipeline(sum_pipe_steps)
-        return sum_pipe  
+
+        return sum_trans_steps  
 
 
     def set_feature_name(self, feature_name:str) -> None:
@@ -81,13 +88,7 @@ class NumericFeatureTransformer(base.TransformerMixin, base.BaseEstimator):
         '''
         Fit the current pipeline to data.
         '''
-        self._feature_check(data)
-        if self._is_fitted and not overwrite:
-            raise TransformerAlreadyFittedError()
-        self._pipe = self.make_pipeline()
-        self._pipe.fit(data)
-        self._is_fitted = True
-        return self
+        pass
 
     def transform(self, data:pd.DataFrame):
         '''
@@ -108,18 +109,15 @@ class NumericFeatureTransformer(base.TransformerMixin, base.BaseEstimator):
         return trans_data
 
     
-    def make_pipeline(self):
+    def make_trans_tuple(self):
         if not self._step_names:
             self._handle_empty_pipeline()
         
         pipe_steps = self.make_pipeline_steps()
         pipe = pipeline.Pipeline(steps=pipe_steps)
         trans_tuple = (f'{self.feature_name}_trans', pipe, [self.feature_name])
-        transformer = compose.ColumnTransformer(
-            [trans_tuple]
-        )
 
-        return transformer    
+        return trans_tuple    
 
     def make_pipeline_steps(self):
         pipe_steps = list(zip(self._step_names, self._step_trans))
