@@ -1,6 +1,7 @@
 import os
 
 import pandas as pd
+import numpy as np
 
 def get_training_data():
     '''
@@ -32,3 +33,8 @@ class TransformerAlreadyFittedError(Exception):
     def __init__(self):
         message = 'Transformer already fitted to data, use overwrite argument to re-fit the pipeline.'
         super().__init__(message) 
+
+class ColumnTransformerTypeMismatchError(Exception):
+    def __init__(self, indices:np.ndarray):
+        message = f'Arguments at positions {indices} are not FeatureTransformers'
+        super().__init__(message)
