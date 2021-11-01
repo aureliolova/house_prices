@@ -17,15 +17,32 @@ from sklearn import compose
 from sklearn import pipeline
 from sklearn import preprocessing as prep
 
-from preprocessing.utils import TransformerAlreadyFittedError, TransformerNotFittedError, FeatureNotFoundError, NumericFeatureMismatchError
+from preprocessing.utils import TransformerAlreadyFittedError, TransformerNotFittedError, FeatureNotFoundError, NumericFeatureMismatchError, ColumnTransformerTypeMismatchError
 #%% PipelineBuilder
 
 class ColumnTransformBuilder:
 
     def __init__(self, *args):
+        ColumnTransformBuilder._assert_arg_types(args)
         self._transformations = args
     
-    
+    def build(self):
+        tuples = self._get_trans_tuples()
+        column_transform = compose.ColumnTransformer(transformers=tuples)
+        return column_transform
+
+    def _get_trans_tuples(self):
+        tuples = [trans.make_trans_tuple() for trans in self._transformations]
+        return tuples
+        
+    @staticmethod
+    def _assert_arg_types(args):
+        arg_number_ary = np.arange(0, len(args), dtype= np.int8)
+        arg_type_ary = np.array([isinstance(arg, FeatureTransformer) for arg in args])
+        if not all(arg_type_ary):
+            indices = arg_number_ary[~arg_type_ary]
+            raise ColumnTransformerTypeMismatchError(indices)
+   
 #%% base FeatureTransformerClass
 class FeatureTransformer(base.TransformerMixin, base.BaseEstimator):
     def __init__(self):
@@ -37,37 +54,11 @@ class NumericFeatureTransformer(FeatureTransformer):
     Base class for transforming a specific numeric feature.
     '''
     def __init__(self, feature_name:str=None):
+        super().__init__()
         self.feature_name = feature_name
         self._step_names = []
         self._step_trans = []
         self._is_fitted = False
-
-    def __add__(self, other) -> pipeline.Pipeline:
-        return self.__radd__(other)
-
-
-    def __radd__(self, other) -> pipeline.Pipeline:
-        s_trans = self.make_trans_tuple()
-        o_trans = other.make_trans_tuple()
-
-        sum_trans_steps = [
-            s_trans,
-            o_trans
-        ]
-
-        return sum_trans_steps 
-
-    def __ladd__(self, other) -> pipeline.Pipeline:
-        s_trans = self.make_trans_tuple()
-        o_trans = other.make_trans_tuple()
-
-        sum_trans_steps = [
-            o_trans,
-            s_trans
-        ]
-
-        return sum_trans_steps  
-
 
     def set_feature_name(self, feature_name:str) -> None:
         '''
