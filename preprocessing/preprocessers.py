@@ -79,7 +79,14 @@ class NumericFeatureTransformer(FeatureTransformer):
         '''
         Fit the current pipeline to data.
         '''
-        pass
+        if self._is_fitted and not overwrite:
+            raise TransformerAlreadyFittedError()
+        trans_builder = ColumnTransformBuilder(self)
+        transform = trans_builder.build()
+        transform.fit(data)
+        self._is_fitted = True
+        self._fitted = transform
+        return transform
 
     def transform(self, data:pd.DataFrame):
         '''
@@ -87,7 +94,7 @@ class NumericFeatureTransformer(FeatureTransformer):
         '''
         if not self._is_fitted:
             raise TransformerNotFittedError()
-        trans_data = self._pipe.transform(data)
+        trans_data = self._fitted.transform(data)
 
         return trans_data
     
