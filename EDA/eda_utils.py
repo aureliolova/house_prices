@@ -11,6 +11,10 @@ import uuid
 
 import pandas as pd
 import numpy as np
+import statsmodels.formula.api as smf
+import statsmodels.stats.api as stats
+from scipy.stats import norm
+from scipy.stats import chisquare
 
 from matplotlib import pyplot as plt
 plt.style.use('seaborn')
@@ -309,7 +313,55 @@ def make_scatterplot(data:pd.DataFrame, pred_col:str, resp_col:str, ax:plt.Axes=
     else:
         return ax
 
-def main_cont_var_figure(data:pd.DataFrame, cont_col:str, tgt_col:str, hist_bin_mult:float=1, log_cont:bool=False, log_tgt:bool=False) -> plt.Figure:
+def get_normal_xy(data:pd.Series) -> ty.Tuple[np.ndarray, np.ndarray]:
+    '''
+    Produce x, y coordinate arrays for a normal pmf with parameters computed from data.
+    '''
+    mean_value = data.mean()
+    std_value = data.std()
+    max_value = data.max()
+    min_value = data.min()
+
+    x_coords = np.linspace(min_value, max_value, 1000)
+    y_coords = norm.pdf(x_coords, loc=mean_value, scale=std_value)
+    return x_coords, y_coords
+
+def get_normal_chisq_test(data:pd.Series, n_bins:int=None) -> float:
+    '''
+    Produce the p-value of the chi-squared normality test on data.
+    '''
+    
+    obs_dens, bins = np.histogram(data, density=False, bins=n_bins)
+    left_bins = bins[:len(bins)-1]
+    right_bins = bins[1:]
+    
+    mean_value = data.mean()
+    std_value = data.std()
+    left_cdf = norm.cdf(left_bins, loc=mean_value, scale=std_value)
+    right_cdf = norm.cdf(right_bins, loc=mean_value, scale=std_value)
+    probs = right_cdf - left_cdf
+    exp_dens = probs*obs_dens.sum()
+    if (diff:=obs_dens.sum() - exp_dens.sum()) > 0:
+        mid_exp_dens = round((exp_dens.shape[0] - 1)/2)
+        exp_dens[mid_exp_dens] += diff
+
+    _, p_value = chisquare(f_obs=obs_dens, f_exp=exp_dens, ddof=2)
+    return round(p_value, 3)
+
+def add_normal_fit(data:pd.DataFrame, hist_ax:plt.Axes, cont_col:str, log:bool=False, hist_bin_mult:float=1):
+    norm_series = data.loc[:, cont_col].copy()
+    n_bins = math.ceil(math.log2(norm_series.max())*hist_bin_mult)
+    if log:
+        norm_series = np.log10(norm_series)
+    p_val = get_normal_chisq_test(data=norm_series, n_bins=n_bins)
+    x_coords, y_coords = get_normal_xy(norm_series)
+    hist_ax.plot(x_coords, y_coords, 'y-')
+    ylab = hist_ax.get_ylabel()
+    ylab += f' | p_val_chisq: {p_val}'
+    hist_ax.set_ylabel(ylab)
+    return hist_ax
+
+def main_cont_var_figure(data:pd.DataFrame, cont_col:str, tgt_col:str, hist_bin_mult:float=1, fit_normal:bool=False, log_cont:bool=False, log_tgt:bool=False) -> plt.Figure:
     '''
     Produce main figure for continuous variable analysis; contains a histogram of cont_col, a boxplot of the same variable, and a scatterplot of cont_col v. resp_col.
 
@@ -327,7 +379,9 @@ def main_cont_var_figure(data:pd.DataFrame, cont_col:str, tgt_col:str, hist_bin_
     
     hist_ax = fig.add_subplot(gridspec[0:4])
     make_hist(data=data, num_col=cont_col, ax=hist_ax, bin_mult=hist_bin_mult, log=log_cont)
-
+    if fit_normal:
+        add_normal_fit(data=data, cont_col=cont_col, hist_ax=hist_ax, log=log_cont, hist_bin_mult=hist_bin_mult)
+        
     bp_ax = fig.add_subplot(gridspec[4])
     make_boxplot(data=data, num_col=cont_col, log=log_cont, ax=bp_ax)
 
@@ -335,3 +389,24 @@ def main_cont_var_figure(data:pd.DataFrame, cont_col:str, tgt_col:str, hist_bin_
     make_scatterplot(data=data, pred_col=cont_col, resp_col=tgt_col, ax=scatter_ax, log_pred=log_cont, log_resp=log_tgt)
 
     return fig
+
+def make_single_factor_ols_model(data:pd.DataFrame, factor_col:str, response_col:str):
+    '''
+    Fit a single factor OLS model of response_col by factor_col
+    '''
+    stat_data = data.loc[:, [factor_col, response_col]].dropna(how='any')
+    formula_string = f'{response_col} ~ C({factor_col})'
+    model = smf.ols(formula=formula_string, data=stat_data).fit()
+    return model
+
+def one_way_anova(data:pd.DataFrame, factor_col:str, response_col:str, return_p:bool=False) -> pd.DataFrame:
+    '''
+    Perform a one-way anova of response_col by factor_col and return the results.
+    '''
+    model = make_single_factor_ols_model(data, factor_col, response_col)
+    anova_table = stats.anova_lm(model)
+    p_value = anova_table.iloc[0, anova_table.shape[1]-1]
+    if return_p:
+        return anova_table, p_value
+    else:
+        return anova_table
