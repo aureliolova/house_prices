@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import statsmodels.formula.api as smf
 import statsmodels.stats.api as stats
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from scipy.stats import norm
 from scipy.stats import chisquare
 
@@ -44,7 +45,7 @@ def make_barplot(data:pd.DataFrame, bar_col:str, pct:bool=False, return_data:boo
         plot_data
         .groupby(bar_col, as_index=False)
         .count()
-        .sort_values(by=['count'], ascending=False)
+        .sort_values(by=['count'], ascending=True)
         .reset_index(drop=True)
     )
     
@@ -146,6 +147,27 @@ def make_classed_boxplot(data:pd.DataFrame, key_col:str, val_col:str, log:bool=F
     
     return fig, ax
 
+def tukey_test(data:pd.DataFrame, class_col:str, val_col:str, log_val:bool=False):
+    '''
+    Perform Tukey's pairwise t-test of difference in val_col between groups in class_col.
+    '''
+
+    test_data = (
+        data
+        .copy()
+        .loc[:, [class_col, val_col]]
+        .dropna(how='any')
+    )
+    
+    groups = test_data.loc[:, class_col]
+    if log_val:
+        endog = np.log10(test_data.loc[:, val_col])
+    else:
+        endog = test_data.loc[:, val_col]
+    results = pairwise_tukeyhsd(endog=endog, groups=groups)
+    return results
+
+
 def main_class_var_figure(data:pd.DataFrame, class_col:str, val_col:str, log_bp:bool=False) -> ty.Tuple[plt.Figure, plt.Axes]:
     '''
     Produce a figure containing a count bar plot with cumulative percent line by class indicated in class_col; second figure contains separate boxplots of val_col by class_col.
@@ -166,37 +188,50 @@ def main_class_var_figure(data:pd.DataFrame, class_col:str, val_col:str, log_bp:
     boxplot_data = boxplot_data[bp_sorting_index]
     boxplot_names = boxplot_names[bp_sorting_index]
 
-    fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(20, 10))
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(10, 15))
 
     total_rows = len(data)
     non_null_rows = barplot_data.loc[:, 'count'].sum()
     pct_non_null = non_null_rows / total_rows * 100 
-    ax[0].set_title(f'{class_col}: {non_null_rows=} out of {total_rows=} ({pct_non_null:1,.2f}%)')
-    ax[0].bar(x=barplot_data.index, height=barplot_data.loc[:, 'count'])
-    ax[0].set_xticks(barplot_data.index)
-    ax[0].set_xticklabels(barplot_data.loc[:, class_col])
+    fig.suptitle(f'{class_col}: {non_null_rows=} out of {total_rows=} ({pct_non_null:1,.2f}%)')
+    ax[0].barh(y=barplot_data.index, width=barplot_data.loc[:, 'count'])
+    ax[0].set_yticks(barplot_data.index)
+    ax[0].set_yticklabels(barplot_data.loc[:, class_col])
 
-    secax_func = lambda x: x/max(x)
+    mx = barplot_data.loc[:, 'count'].max()
+    _secax_func = lambda x, mx: x/mx
+    secax_func = ftools.partial(_secax_func, **{'mx':mx})
     _inv_secax_func = lambda pct, mx: pct*mx
-    inv_secax_func = ftools.partial(_inv_secax_func, **{'mx':barplot_data.loc[:, 'count'].max()})
+    inv_secax_func = ftools.partial(_inv_secax_func, **{'mx':mx})
 
-    ax[0].plot(cumplot_data.index, cumplot_data.loc[:, 'scaled'], 'y-o')
-    ax[0].set_xlabel(class_col)
-    ax[0].set_ylabel('count')
-    secax = ax[0].secondary_yaxis('right', functions=(secax_func, inv_secax_func))
+    ax[0].plot(cumplot_data.loc[:, 'scaled'][::-1], cumplot_data.index, 'y-o')
+    ax[0].set_ylabel(class_col)
+    ax[0].set_xlabel('count')
+    secax = ax[0].secondary_xaxis('top', functions=(secax_func, inv_secax_func))
     secax.set_label('% of total')
 
-    ax[1].boxplot(boxplot_data)
-    ax[1].set_xticks(barplot_data.index+1)
-    ax[1].set_xticklabels(boxplot_names)
+    ax[1].boxplot(boxplot_data, vert=False)
+    ax[1].set_yticks(barplot_data.index+1)
+    ax[1].set_yticklabels(boxplot_names)
 
-    ax[1].set_xlabel(class_col)
     if log_bp:
-        ylab = f'log10 {val_col}'
+        xlab = f'log10 {val_col}'
     else:
-        ylab = val_col
+        xlab = val_col
     
-    ax[1].set_ylabel(ylab)
+    ax[1].set_xlabel(xlab)
+
+    tukey_results = tukey_test(data=data, class_col=class_col, val_col=val_col, log_val=log_bp)
+    result_groupings = tukey_results.groupsunique
+    sorted_index_groupings = [enum[0] for enum in sorted(enumerate(result_groupings), key=lambda e_tup: barplot_data.loc[:, class_col].to_list().index(e_tup[1]))]
+    sorted_groupings = result_groupings[sorted_index_groupings]
+    tukey_results.groupsunique = sorted_groupings
+    tukey_results.plot_simultaneous(ax=ax[2])
+    ylims = ax[1].get_ylim()
+    ylims = tuple((np.array(ylims) -1).tolist())
+    ax[2].set_ylim(ylims)
+    ax[2].set_title('tukey')
+    ax[2].set_xlabel(xlab)
 
     return fig, ax
 
