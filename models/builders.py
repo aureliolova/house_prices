@@ -58,29 +58,6 @@ class ModelPipelineBuilder:
     def reset(self):
         self.__init__(prep_trans=self.prep_trans)
 
-class TrainingTracker(cm.ContextDecorator):
-    def __init__(self, model_tracker:ModelTrainingTracker, experiment_name:str, metrics:list):
-        self.model = mode_tracker
-        self.experiment_name = experiment_name
-        self.metrics = metrics
-        super().__init__()
-    
-    def __enter__(self):
-        self.experiment_id = TrainingTracker.get_experiment(self.experiment_name)
-
-    def train(self):
-        pass
-
-    @staticmethod
-    def get_experiment(experiment_name:str) -> int:
-        experiment = mlflow.get_experiment_by_name(experiment_name)
-
-        if experiment:
-            expermient_id = experiment.experiment_id
-        else:
-            experiment_id = mlflow.create_experiment(name=experiment_name)
-        return experiment_id
-
 class ModelTrainingTracker:
 
     def __init__(self, pipe:pipeline.Pipeline=None):
@@ -115,3 +92,30 @@ class ModelTrainingTracker:
     @pipe.deleter
     def pipe(self):
         self.prep_kwargs = {}
+
+class TrainingTracker(cm.ContextDecorator):
+    def __init__(self, model_tracker:ModelTrainingTracker, experiment_name:str, metrics:list):
+        self.model = model_tracker
+        self.experiment_name = experiment_name
+        self.metrics = metrics
+        super().__init__()
+    
+    def __enter__(self):
+        self.experiment_id = TrainingTracker.get_experiment(self.experiment_name)
+        return self
+
+    def train(self):
+        pass
+
+    def __exit__(self, *exc):
+        pass
+
+    @staticmethod
+    def get_experiment(experiment_name:str) -> int:
+        experiment = mlflow.get_experiment_by_name(experiment_name)
+
+        if experiment:
+            expermient_id = experiment.experiment_id
+        else:
+            experiment_id = mlflow.create_experiment(name=experiment_name)
+        return experiment_id
